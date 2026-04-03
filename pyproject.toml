@@ -1,0 +1,54 @@
+[project]
+name = "ai-agent-learning"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "fastapi>=0.135.3",
+    "uvicorn>=0.42.0",
+]
+
+[dependency-groups]
+dev = [
+    "httpx>=0.28.1",
+    "pre-commit>=4.5.1",
+    "pytest>=9.0.2",
+    "ruff>=0.15.9",
+]
+
+[tool.ruff]
+# 指定 Python 版本
+target-version = "py311"
+# 要检查的目录
+line-length = 88
+
+[tool.ruff.lint]
+# 选择要启用的规则
+select = [
+    "E",   # pycodestyle errors
+    "W",   # pycodestyle warnings
+    "F",   # pyflakes
+    "I",   # isort
+    "C",   # flake8-comprehensions
+    "B",   # flake8-bugbear
+    "UP",  # pyupgrade
+]
+# 忽略某些规则
+ignore = [
+    "E501",  # 行长度由 formatter 处理
+]
+
+[tool.ruff.format]
+# 格式化配置
+quote-style = "double"
+indent-style = "space"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = "test_*.py"
+python_classes = "Test*"
+python_functions = "test_*"
+addopts = "-v --tb=short"
+# 添加这一行，让 pytest 能找到 src 目录
+pythonpath = ["src"]
