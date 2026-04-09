@@ -1,10 +1,20 @@
 from fastapi import APIRouter, BackgroundTasks, Depends, Request
+from sqlalchemy.ext.asyncio import AsyncSession
 
-from ..deps import get_current_user
+from ..deps import get_current_user, get_db
 from ..schemas import UserResponse
 from ..services.logging_service import format_access_log, write_access_log
 
 router = APIRouter(prefix="/users", tags=["Users"])
+
+
+@router.get("/db-check")
+async def db_check(db: AsyncSession = Depends(get_db)) -> dict[str, str]:
+    """
+    最小数据库依赖注入验证接口。
+    今天先证明 AsyncSession 已经能被 FastAPI 正常拿到。
+    """
+    return {"status": "db dependency ok"}
 
 
 @router.get("/me", response_model=UserResponse)

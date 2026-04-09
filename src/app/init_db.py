@@ -1,19 +1,22 @@
-# 关键点：
-# Base.metadata 会收集所有继承 Base 的 ORM 模型。
-# 但前提是这些模型文件已经被 import 进来了。
+from __future__ import annotations
+
+import asyncio
+
 import app.models  # noqa: F401
-from app.db import Base, engine
+
+from .db import Base, async_engine
 
 
-def init_db() -> None:
+async def init_db() -> None:
     """
-    创建所有表。
+    异步建表。
 
-    学习阶段先用 create_all()，
-    后面再切到 Alembic 管理迁移。
+    create_all() 本身是同步风格 API，
+    所以在 AsyncEngine 下需要通过 run_sync() 包一层。
     """
-    Base.metadata.create_all(bind=engine)
+    async with async_engine.begin() as conn:
+        await conn.run_sync(Base.metadata.create_all)
 
 
 if __name__ == "__main__":
-    init_db()
+    asyncio.run(init_db())

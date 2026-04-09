@@ -1,12 +1,29 @@
+from __future__ import annotations
+
+from collections.abc import AsyncGenerator
+
 from fastapi import Depends, Header
 from fastapi.security import OAuth2PasswordBearer
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from .core.security import fake_decode_token
+from .db import AsyncSessionLocal
 
 # 告诉 FastAPI：
 # 以后如果某个依赖需要 token，
 # 就从 Authorization: Bearer <token> 里取。
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/login")
+
+
+async def get_db() -> AsyncGenerator[AsyncSession, None]:
+    """
+    FastAPI 异步数据库依赖。
+
+    这就是把 FastAPI 官方同步版 `yield session`
+    改造成 AsyncSession 版的关键位置。
+    """
+    async with AsyncSessionLocal() as session:
+        yield session
 
 
 async def get_request_id(x_request_id: str | None = Header(default=None)) -> str:

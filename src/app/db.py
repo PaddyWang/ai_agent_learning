@@ -1,11 +1,13 @@
 from __future__ import annotations
 
-from sqlalchemy import create_engine
-from sqlalchemy.orm import DeclarativeBase, sessionmaker
+# from sqlalchemy import create_engine
+# from sqlalchemy.orm import DeclarativeBase, sessionmaker
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
+from sqlalchemy.orm import DeclarativeBase
 
-# 学习阶段先用 SQLite，阻力最小。
-# 等你 Day 10 / Day 11 再切 PostgreSQL 和 Alembic，会更顺。
-DATABASE_URL = "sqlite:///./app.db"
+# 今天先继续用 SQLite，降低切换成本。
+# 注意：异步版 SQLite URL 要带 aiosqlite 方言。
+DATABASE_URL = "sqlite+aiosqlite:///./app.db"
 
 
 class Base(DeclarativeBase):
@@ -13,26 +15,26 @@ class Base(DeclarativeBase):
     所有 ORM 模型的共同父类。
 
     作用：
-    1. 让 SQLAlchemy 知道哪些类是 ORM 模型
-    2. 统一收集 metadata
-    3. 后面可以通过 Base.metadata.create_all() 一次性建表
+    1. 收集 metadata
+    2. 让 SQLAlchemy 知道哪些类是 ORM 模型
     """
 
     pass
 
 
-# Engine 是 SQLAlchemy 和数据库之间的总入口。
-# echo=True 适合学习期打开，你能直接看到 SQLAlchemy 发出的 SQL。
-engine = create_engine(
+# 异步 Engine
+async_engine = create_async_engine(
     DATABASE_URL,
     echo=True,
 )
 
 
-# SessionLocal 是一个“会话工厂”，不是数据库表里的 session。
-# 后面每次需要数据库会话时，都从这里拿一个 Session 实例。
-SessionLocal = sessionmaker(
-    bind=engine,
+# AsyncSession 工厂
+# 官方文档推荐在 asyncio 场景下使用 expire_on_commit=False，
+# 这样提交后对象属性不会立刻失效，后续访问更稳定。
+AsyncSessionLocal = async_sessionmaker(
+    bind=async_engine,
+    class_=AsyncSession,
+    expire_on_commit=False,
     autoflush=False,
-    autocommit=False,
 )

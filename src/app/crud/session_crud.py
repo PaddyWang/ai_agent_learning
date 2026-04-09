@@ -2,11 +2,11 @@ from __future__ import annotations
 
 from app.models import ChatSession, Message, Task
 from sqlalchemy import select
-from sqlalchemy.orm import Session
+from sqlalchemy.ext.asyncio import AsyncSession
 
 
-def create_chat_session(
-    db: Session,
+async def create_chat_session(
+    db: AsyncSession,
     *,
     user_id: str,
     title: str = "New Chat",
@@ -27,21 +27,27 @@ def create_chat_session(
         status=status,
     )
     db.add(chat_session)
-    db.commit()
-    db.refresh(chat_session)
+    await db.commit()
+    await db.refresh(chat_session)
     return chat_session
 
 
-def get_chat_session_by_id(db: Session, session_id: int) -> ChatSession | None:
+async def get_chat_session_by_id(
+    db: AsyncSession,
+    session_id: int,
+) -> ChatSession | None:
     """
     按主键查询会话。
 
     db.get() 适合主键查询，写法最直接。
     """
-    return db.get(ChatSession, session_id)
+    return await db.get(ChatSession, session_id)
 
 
-def list_chat_sessions_by_user(db: Session, user_id: str) -> list[ChatSession]:
+async def list_chat_sessions_by_user(
+    db: AsyncSession,
+    user_id: str,
+) -> list[ChatSession]:
     """
     查询某个用户的所有会话。
     """
@@ -50,11 +56,12 @@ def list_chat_sessions_by_user(db: Session, user_id: str) -> list[ChatSession]:
         .where(ChatSession.user_id == user_id)
         .order_by(ChatSession.id.desc())
     )
-    return list(db.execute(stmt).scalars().all())
+    result = await db.execute(stmt)
+    return list(result.scalars().all())
 
 
-def update_chat_session_title(
-    db: Session,
+async def update_chat_session_title(
+    db: AsyncSession,
     *,
     session_id: int,
     title: str,
@@ -67,13 +74,13 @@ def update_chat_session_title(
         return None
 
     chat_session.title = title
-    db.commit()
-    db.refresh(chat_session)
+    await db.commit()
+    await db.refresh(chat_session)
     return chat_session
 
 
-def create_message(
-    db: Session,
+async def create_message(
+    db: AsyncSession,
     *,
     session_id: int,
     role: str,
@@ -92,13 +99,13 @@ def create_message(
         sequence=sequence,
     )
     db.add(message)
-    db.commit()
-    db.refresh(message)
+    await db.commit()
+    await db.refresh(message)
     return message
 
 
-def list_messages_by_session(
-    db: Session,
+async def list_messages_by_session(
+    db: AsyncSession,
     session_id: int,
 ) -> list[Message]:
     """
@@ -109,11 +116,12 @@ def list_messages_by_session(
         .where(Message.session_id == session_id)
         .order_by(Message.sequence.asc(), Message.id.asc())
     )
-    return list(db.execute(stmt).scalars().all())
+    result = await db.execute(stmt)
+    return list(result.scalars().all())
 
 
-def create_task(
-    db: Session,
+async def create_task(
+    db: AsyncSession,
     *,
     session_id: int,
     task_type: str,
@@ -132,24 +140,25 @@ def create_task(
         output_text=output_text,
     )
     db.add(task)
-    db.commit()
-    db.refresh(task)
+    await db.commit()
+    await db.refresh(task)
     return task
 
 
-def list_tasks_by_session(
-    db: Session,
+async def list_tasks_by_session(
+    db: AsyncSession,
     session_id: int,
 ) -> list[Task]:
     """
     查询某个会话下的所有任务。
     """
     stmt = select(Task).where(Task.session_id == session_id).order_by(Task.id.asc())
-    return list(db.execute(stmt).scalars().all())
+    result = await db.execute(stmt)
+    return list(result.scalars().all())
 
 
-def get_session_detail(
-    db: Session,
+async def get_session_detail(
+    db: AsyncSession,
     session_id: int,
 ) -> ChatSession | None:
     """
