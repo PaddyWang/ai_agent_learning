@@ -2,12 +2,11 @@ from __future__ import annotations
 
 from collections.abc import AsyncGenerator
 
+from app.core.security import fake_decode_token
+from app.db import AsyncSessionLocal
 from fastapi import Depends, Header
 from fastapi.security import OAuth2PasswordBearer
 from sqlalchemy.ext.asyncio import AsyncSession
-
-from .core.security import fake_decode_token
-from .db import AsyncSessionLocal
 
 # 告诉 FastAPI：
 # 以后如果某个依赖需要 token，

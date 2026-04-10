@@ -9,6 +9,7 @@ dependencies = [
     "alembic>=1.18.4",
     "email-validator>=2.3.0",
     "fastapi[standard]>=0.135.3",
+    "redis>=7.4.0",
     "sqlalchemy[asyncio]>=2.0.49",
     "uvicorn>=0.42.0",
 ]

@@ -1,11 +1,18 @@
+from app.core.redis_client import redis_client
+from app.deps import get_current_user, get_db
+from app.schemas import UserResponse
+from app.services.logging_service import format_access_log, write_access_log
 from fastapi import APIRouter, BackgroundTasks, Depends, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from ..deps import get_current_user, get_db
-from ..schemas import UserResponse
-from ..services.logging_service import format_access_log, write_access_log
-
 router = APIRouter(prefix="/users", tags=["Users"])
+
+
+@router.get("/redis-check")
+async def redis_check() -> dict[str, str]:
+    redis_client.set("health:redis", "ok", ex=30)
+    value = redis_client.get("health:redis")
+    return {"status": value or "failed"}
 
 
 @router.get("/db-check")

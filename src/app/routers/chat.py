@@ -2,12 +2,13 @@ import asyncio
 import json
 from collections.abc import AsyncGenerator
 
-from fastapi import APIRouter, BackgroundTasks, Depends, Request
+from app.deps import get_current_user
+from app.schemas import ChatRequest, ChatResponse
+from app.services.logging_service import format_access_log, write_access_log
+from app.services.rate_limit_service import check_simple_rate_limit
+from app.services.session_store_service import save_chat_runtime_state
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request, status
 from fastapi.responses import StreamingResponse
-
-from ..deps import get_current_user
-from ..schemas import ChatRequest, ChatResponse
-from ..services.logging_service import format_access_log, write_access_log
 
 router = APIRouter(prefix="/chat", tags=["chat"])
 
@@ -25,7 +26,34 @@ async def chat(
     现在先做 echo，
     后面你接 LLM、RAG、Agent 时，这里就是主入口。
     """
+
+    user_id = current_user["user_id"]
+
+    # 新增：限流
+    allowed, current_count = check_simple_rate_limit(
+        user_id=user_id,
+        route="chat",
+        limit=10,
+        window_seconds=60,
+    )
+    if not allowed:
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail=f"rate limit exceeded, current_count={current_count}",
+        )
+
     session_id = payload.session_id or f"session_{current_user['user_id']}"
+
+    # 新增：保存运行时状态
+    save_chat_runtime_state(
+        session_id=0 if isinstance(session_id, str) else session_id,
+        data={
+            "last_message": payload.message,
+            "model": payload.model,
+            "stream": payload.stream,
+        },
+        ttl=1800,
+    )
 
     log_line = format_access_log(
         path=str(request.url.path),
@@ -102,7 +130,34 @@ async def chat_stream(
     3. 返回值从普通 JSON 改成 StreamingResponse
     4. media_type 必须是 text/event-stream
     """
+    user_id = current_user["user_id"]
+
+    # 新增：限流
+    allowed, current_count = check_simple_rate_limit(
+        user_id=user_id,
+        route="chat_stream",
+        limit=20,
+        window_seconds=60,
+    )
+    if not allowed:
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail=f"rate limit exceeded, current_count={current_count}",
+        )
+
     session_id = payload.session_id or f"session_{current_user['user_id']}"
+
+    # 新增：保存运行时状态
+    save_chat_runtime_state(
+        session_id=0 if isinstance(session_id, str) else session_id,
+        data={
+            "last_message": payload.message,
+            "model": payload.model,
+            "stream": True,
+        },
+        ttl=1800,
+    )
+
     generator = fake_stream_answer(
         message=payload.message,
         session_id=session_id,

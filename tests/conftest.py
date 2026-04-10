@@ -1,6 +1,120 @@
+from pathlib import Path
+
 import pytest
 from app.main import app
 from fastapi.testclient import TestClient
+
+
+class FakePipeline:
+    def __init__(self, redis_client: "FakeRedis") -> None:
+        self.redis_client = redis_client
+        self.commands: list[tuple[str, tuple, dict]] = []
+
+    def incr(self, key: str) -> "FakePipeline":
+        self.commands.append(("incr", (key,), {}))
+        return self
+
+    def ttl(self, key: str) -> "FakePipeline":
+        self.commands.append(("ttl", (key,), {}))
+        return self
+
+    def execute(self) -> list[object]:
+        results: list[object] = []
+        for name, args, kwargs in self.commands:
+            results.append(getattr(self.redis_client, name)(*args, **kwargs))
+        self.commands.clear()
+        return results
+
+
+class FakeRedis:
+    """
+    一个足够覆盖当前测试场景的内存版 Redis。
+
+    目标：
+    1. 不依赖本机 Redis 服务
+    2. 支持当前项目已经用到的 get/set/delete/incr/ttl/expire/pipeline
+    """
+
+    def __init__(self) -> None:
+        self.store: dict[str, str] = {}
+        self.expiry: dict[str, int] = {}
+
+    def from_json(self, value: str) -> str:
+        return value
+
+    def set(self, key: str, value: str, ex: int | None = None) -> bool:
+        self.store[key] = value
+        if ex is not None:
+            self.expiry[key] = ex
+        elif key in self.expiry:
+            del self.expiry[key]
+        return True
+
+    def get(self, key: str) -> str | None:
+        return self.store.get(key)
+
+    def delete(self, key: str) -> int:
+        deleted = 0
+        if key in self.store:
+            del self.store[key]
+            deleted += 1
+        self.expiry.pop(key, None)
+        return deleted
+
+    def incr(self, key: str) -> int:
+        current = int(self.store.get(key, "0"))
+        current += 1
+        self.store[key] = str(current)
+        return current
+
+    def ttl(self, key: str) -> int:
+        if key not in self.store:
+            return -2
+        return self.expiry.get(key, -1)
+
+    def expire(self, key: str, seconds: int) -> bool:
+        if key not in self.store:
+            return False
+        self.expiry[key] = seconds
+        return True
+
+    def ping(self) -> bool:
+        return True
+
+    def pipeline(self) -> FakePipeline:
+        return FakePipeline(self)
+
+
+@pytest.fixture
+def fake_redis() -> FakeRedis:
+    return FakeRedis()
+
+
+@pytest.fixture(autouse=True)
+def patch_redis_and_logs(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    fake_redis: FakeRedis,
+) -> None:
+    """
+    自动把测试环境里的外部依赖替换掉：
+    1. 用内存版 FakeRedis 替代真实 Redis
+    2. 把日志文件写到 pytest 的临时目录，避免权限问题
+    """
+    import app.core.redis_client as redis_client_module
+    import app.routers.users as users_router_module
+    import app.services.cache_service as cache_service_module
+    import app.services.rate_limit_service as rate_limit_service_module
+    import app.services.session_store_service as session_store_service_module
+    from app.services import logging_service as logging_service_module
+
+    monkeypatch.setattr(redis_client_module, "redis_client", fake_redis)
+    monkeypatch.setattr(cache_service_module, "redis_client", fake_redis)
+    monkeypatch.setattr(session_store_service_module, "redis_client", fake_redis)
+    monkeypatch.setattr(rate_limit_service_module, "redis_client", fake_redis)
+    monkeypatch.setattr(users_router_module, "redis_client", fake_redis)
+
+    monkeypatch.setattr(logging_service_module, "LOG_FILE", tmp_path / "app.log")
 
 
 @pytest.fixture

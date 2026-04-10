@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 from app.models import ChatSession, Message, Task
+from app.services.cache_service import delete_session_list_cache
+from services.cache_service import get_session_list_cache, set_session_list_cache
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -29,6 +31,10 @@ async def create_chat_session(
     db.add(chat_session)
     await db.commit()
     await db.refresh(chat_session)
+
+    # 新增：会话列表缓存失效
+    delete_session_list_cache(user_id)
+
     return chat_session
 
 
@@ -51,13 +57,34 @@ async def list_chat_sessions_by_user(
     """
     查询某个用户的所有会话。
     """
+    # 新增：先查缓存
+    cached = get_session_list_cache(user_id)
+    if cached is not None:
+        # 这里你后续可以决定是否直接返回 dict 结构
+        # 学习阶段先保留“这里只展示改动点”
+        pass
+
     stmt = (
         select(ChatSession)
         .where(ChatSession.user_id == user_id)
         .order_by(ChatSession.id.desc())
     )
     result = await db.execute(stmt)
-    return list(result.scalars().all())
+    sessions = list(result.scalars().all())
+
+    # 新增：写缓存
+    cache_payload = [
+        {
+            "id": item.id,
+            "user_id": item.user_id,
+            "title": item.title,
+            "status": item.status,
+        }
+        for item in sessions
+    ]
+    set_session_list_cache(user_id, cache_payload, ttl=300)
+
+    return sessions
 
 
 async def update_chat_session_title(
@@ -79,6 +106,10 @@ async def update_chat_session_title(
     chat_session.title = title
     await db.commit()
     await db.refresh(chat_session)
+
+    # 新增：会话列表缓存失效
+    delete_session_list_cache(chat_session.user_id)
+
     return chat_session
 
 
