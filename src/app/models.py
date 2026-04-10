@@ -1,11 +1,15 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime
+from typing import Any
 
-from sqlalchemy import ForeignKey, Integer, String, Text
+from sqlalchemy import JSON, ForeignKey, Index, Integer, String, Text
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from .db import Base
+
+JSON_VARIANT = JSON().with_variant(JSONB, "postgresql")
 
 
 class ChatSession(Base):
@@ -31,14 +35,23 @@ class ChatSession(Base):
     # 会话状态：active / archived / deleted
     status: Mapped[str] = mapped_column(String(20), default="active")
 
+    # 新增：会话扩展信息
+    metadata_json: Mapped[dict[str, Any] | None] = mapped_column(
+        JSON_VARIANT,
+        nullable=True,
+    )
+
     created_at: Mapped[datetime] = mapped_column(default=lambda: datetime.now(UTC))
-    update_at: Mapped[datetime] = mapped_column(default=lambda: datetime.now(UTC))
+    # 原来是 update_at
+    updated_at: Mapped[datetime] = mapped_column(default=lambda: datetime.now(UTC))
 
     # 一个会话对应多条消息
     messages: Mapped[list[Message]] = relationship(back_populates="session")
 
     # 一个会话对应多个任务
     tasks: Mapped[list[Task]] = relationship(back_populates="session")
+    # 新增：索引
+    __table_args__ = (Index("ix_sessions_user_id_updated_at", "user_id", "updated_at"),)
 
 
 class Message(Base):
@@ -52,8 +65,8 @@ class Message(Base):
 
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
 
-    # 外键指向 sessions.id
-    session_id: Mapped[str] = mapped_column(ForeignKey("sessions.id"), index=True)
+    # 原来是 Mapped[str]
+    session_id: Mapped[int] = mapped_column(ForeignKey("sessions.id"), index=True)
 
     # user / assistant / system
     role: Mapped[str] = mapped_column(String(20))
@@ -67,10 +80,19 @@ class Message(Base):
     # 可选：记录消息顺序
     sequence: Mapped[int] = mapped_column(Integer, default=0)
 
+    # 新增：消息扩展信息
+    metadata_json: Mapped[dict[str, Any] | None] = mapped_column(
+        JSON_VARIANT,
+        nullable=True,
+    )
+
     created_at: Mapped[datetime] = mapped_column(default=lambda: datetime.now(UTC))
 
     # 反向关系：每条消息属于一个会话
     session: Mapped[ChatSession] = relationship(back_populates="messages")
+
+    # 新增：索引
+    __table_args__ = (Index("ix_messages_session_sequence", "session_id", "sequence"),)
 
 
 class Task(Base):
@@ -86,7 +108,8 @@ class Task(Base):
 
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
 
-    session_id: Mapped[str] = mapped_column(ForeignKey("sessions.id"), index=True)
+    # 原来是 Mapped[str]
+    session_id: Mapped[int] = mapped_column(ForeignKey("sessions.id"), index=True)
 
     # 比如 summary / retrieval / planning / tool_call
     task_type: Mapped[str] = mapped_column(String(50))
@@ -98,7 +121,20 @@ class Task(Base):
     input_text: Mapped[str | None] = mapped_column(Text, nullable=True)
     output_text: Mapped[str | None] = mapped_column(Text, nullable=True)
 
+    # 新增：任务扩展信息
+    metadata_json: Mapped[dict[str, Any] | None] = mapped_column(
+        JSON_VARIANT,
+        nullable=True,
+    )
+
     created_at: Mapped[datetime] = mapped_column(default=lambda: datetime.now(UTC))
-    update_at: Mapped[datetime] = mapped_column(default=lambda: datetime.now(UTC))
+    # 原来是 update_at
+    updated_at: Mapped[datetime] = mapped_column(default=lambda: datetime.now(UTC))
 
     session: Mapped[ChatSession] = relationship(back_populates="tasks")
+
+    # 新增：索引
+    __table_args__ = (
+        Index("ix_tasks_session_created_at", "session_id", "created_at"),
+        Index("ix_tasks_status", "status"),
+    )

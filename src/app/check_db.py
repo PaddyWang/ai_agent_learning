@@ -1,13 +1,17 @@
-from app.db import engine
+from __future__ import annotations
+
+import asyncio
+
+from app.db import async_engine
 from sqlalchemy import text
 
 
-def check_tables() -> None:
+async def check_tables() -> None:
     """
     用最简单的 SQL 检查表是否真的建出来了。
     """
-    with engine.connect() as conn:
-        result = conn.execute(
+    async with async_engine.connect() as conn:
+        result = await conn.execute(
             text("SELECT name FROM sqlite_master WHERE type='table' ORDER BY name;")
         )
         for row in result:
@@ -15,4 +19,4 @@ def check_tables() -> None:
 
 
 if __name__ == "__main__":
-    check_tables()
+    asyncio.run(check_tables())

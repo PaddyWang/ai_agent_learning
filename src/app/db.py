@@ -7,7 +7,7 @@ from sqlalchemy.orm import DeclarativeBase
 
 # 今天先继续用 SQLite，降低切换成本。
 # 注意：异步版 SQLite URL 要带 aiosqlite 方言。
-DATABASE_URL = "sqlite+aiosqlite:///./app.db"
+DATABASE_URL = "sqlite+aiosqlite:///./app.1.db"
 
 
 class Base(DeclarativeBase):

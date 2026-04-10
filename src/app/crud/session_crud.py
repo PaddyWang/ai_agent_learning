@@ -69,7 +69,10 @@ async def update_chat_session_title(
     """
     更新会话标题。
     """
-    chat_session = db.get(ChatSession, session_id)
+    # 原来：
+    # chat_session = db.get(ChatSession, session_id)
+    # 改成：
+    chat_session = await db.get(ChatSession, session_id)
     if chat_session is None:
         return None
 
@@ -87,6 +90,8 @@ async def create_message(
     content: str,
     model: str | None = None,
     sequence: int = 0,
+    # 新增
+    metadata_json: dict | None = None,
 ) -> Message:
     """
     为某个会话创建一条消息。
@@ -97,6 +102,8 @@ async def create_message(
         content=content,
         model=model,
         sequence=sequence,
+        # 新增
+        metadata_json=metadata_json,
     )
     db.add(message)
     await db.commit()
@@ -128,6 +135,8 @@ async def create_task(
     status: str = "pending",
     input_text: str | None = None,
     output_text: str | None = None,
+    # 新增
+    metadata_json: dict | None = None,
 ) -> Task:
     """
     为某个会话创建一个任务。
@@ -138,6 +147,8 @@ async def create_task(
         status=status,
         input_text=input_text,
         output_text=output_text,
+        # 新增
+        metadata_json=metadata_json,
     )
     db.add(task)
     await db.commit()
@@ -168,4 +179,4 @@ async def get_session_detail(
     因为模型里已经声明了 relationship，
     所以后面可以通过 session.messages / session.tasks 继续访问关联数据。
     """
-    return db.get(ChatSession, session_id)
+    return await db.get(ChatSession, session_id)
