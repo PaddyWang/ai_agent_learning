@@ -1,13 +1,18 @@
 from __future__ import annotations
 
-# from sqlalchemy import create_engine
-# from sqlalchemy.orm import DeclarativeBase, sessionmaker
+import os
+
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.orm import DeclarativeBase
 
 # 今天先继续用 SQLite，降低切换成本。
 # 注意：异步版 SQLite URL 要带 aiosqlite 方言。
-DATABASE_URL = "sqlite+aiosqlite:///./app.1.db"
+# DATABASE_URL = "sqlite+aiosqlite:///./app.1.db"
+
+DATABASE_URL = os.environ.get(
+    "DATABASE_URL",
+    "sqlite+aiosqlite:///./app.db",
+)
 
 
 class Base(DeclarativeBase):
