@@ -1,13 +1,35 @@
+from collections.abc import AsyncIterator
+
+import app.routers.chat as chat_router_module
 from fastapi.testclient import TestClient
+
+
+class FakeGateway:
+    async def stream(
+        self,
+        *,
+        prompt: str,
+        instructions: str | None = None,
+        model: str | None = None,
+    ) -> AsyncIterator[str]:
+        yield "第一段"
+        yield f"第二段: {prompt}"
+
+
+class FakeGatewayFactory:
+    def __call__(self) -> FakeGateway:
+        return FakeGateway()
 
 
 def test_chat_stream_success(
     client: TestClient,
     auth_headers: dict[str, str],
+    monkeypatch,
 ) -> None:
     """
     验证流式接口能成功返回，并且 content-type 正确。
     """
+    monkeypatch.setattr(chat_router_module, "LLMGateway", FakeGatewayFactory())
     response = client.post(
         "/chat/stream",
         headers=auth_headers,
@@ -26,7 +48,8 @@ def test_chat_stream_success(
     assert "data:" in text
     assert '"type": "chunk"' in text
     assert '"type": "done"' in text
-    assert "请帮我介绍一下你自己" in text
+    assert "第一段" in text
+    assert "第二段: 请帮我介绍一下你自己" in text
 
 
 def test_chat_stream_requires_token(client: TestClient) -> None:

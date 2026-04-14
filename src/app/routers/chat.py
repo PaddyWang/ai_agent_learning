@@ -1,9 +1,10 @@
-import asyncio
 import json
 from collections.abc import AsyncGenerator
 
 from app.deps import get_current_user
+from app.llm.types import LLMResponse
 from app.schemas import ChatRequest, ChatResponse
+from app.services.llm_gateway import LLMGateway
 from app.services.logging_service import format_access_log, write_access_log
 from app.services.rate_limit_service import check_simple_rate_limit
 from app.services.session_store_service import save_chat_runtime_state
@@ -11,6 +12,13 @@ from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request,
 from fastapi.responses import StreamingResponse
 
 router = APIRouter(prefix="/chat", tags=["chat"])
+
+
+def build_chat_instructions() -> str:
+    return (
+        "你是一个专业、简洁的中文 AI 助手。"
+        "请优先直接回答用户问题，必要时再补充说明。"
+    )
 
 
 @router.post("", response_model=ChatResponse)
@@ -63,57 +71,18 @@ async def chat(
     )
     background_tasks.add_task(write_access_log, log_line)
 
-    return ChatResponse(
-        session_id=session_id,
-        answer=f"Echo: {payload.message}",
-        model=payload.model,
+    gateway = LLMGateway()
+    llm_response: LLMResponse = await gateway.generate(
+        prompt=payload.message,
+        instructions=build_chat_instructions(),
+        model=payload.model if payload.model != "default" else None,
     )
 
-
-async def fake_stream_answer(
-    message: str,
-    session_id: str,
-    model: str,
-) -> AsyncGenerator[str, None]:
-    """
-    一个学习版的“假流式生成器”。
-
-    它的目标不是模拟真实 LLM SDK，
-    而是先把 SSE 协议和前后端交互跑通。
-
-    每次 yield 一条符合 SSE 格式的消息：
-    data: {...}\n\n
-    """
-    chunks = [
-        "我正在理解你的问题。",
-        "接下来我会给你一个初步回答。",
-        f"你刚才说的是：{message}",
-        "这是一个流式接口演示版本。",
-    ]
-
-    for index, chunk in enumerate(chunks, start=1):
-        payload = {
-            "type": "chunk",
-            "index": index,
-            "session_id": session_id,
-            "model": model,
-            "content": chunk,
-        }
-
-        # SSE 最常见格式：
-        # data: <json string>\n\n
-        yield f"data: {json.dumps(payload, ensure_ascii=False)}\n\n"
-
-        # 模拟 LLM 逐段吐内容的感觉
-        await asyncio.sleep(0.3)
-
-    done_payload = {
-        "type": "done",
-        "session_id": session_id,
-        "model": model,
-    }
-
-    yield f"data: {json.dumps(done_payload, ensure_ascii=False)}\n\n"
+    return ChatResponse(
+        session_id=session_id,
+        answer=llm_response.text,
+        model=llm_response.model,
+    )
 
 
 @router.post("/stream")
@@ -158,14 +127,36 @@ async def chat_stream(
         ttl=1800,
     )
 
-    generator = fake_stream_answer(
-        message=payload.message,
-        session_id=session_id,
-        model=payload.model,
-    )
+    gateway = LLMGateway()
+
+    async def llm_stream() -> AsyncGenerator[str, None]:
+        index = 0
+        response_model = payload.model
+
+        async for chunk in gateway.stream(
+            prompt=payload.message,
+            instructions=build_chat_instructions(),
+            model=response_model if response_model != "default" else None,
+        ):
+            index += 1
+            sse_payload = {
+                "type": "chunk",
+                "index": index,
+                "session_id": session_id,
+                "model": response_model,
+                "content": chunk,
+            }
+            yield f"data: {json.dumps(sse_payload, ensure_ascii=False)}\n\n"
+
+        done_payload = {
+            "type": "done",
+            "session_id": session_id,
+            "model": response_model,
+        }
+        yield f"data: {json.dumps(done_payload, ensure_ascii=False)}\n\n"
 
     return StreamingResponse(
-        generator,
+        llm_stream(),
         media_type="text/event-stream",
         headers={
             # 告诉客户端这是一条持续流，不要缓存
